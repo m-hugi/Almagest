@@ -1,4 +1,4 @@
 #!/bin/bash
 
-gfortran -c degfun.f95
-gfortran -o almagest main.f95 degfun.o
+gfortran -Wall -c -fdec-math almagest.f95
+gfortran -Wall -o almagest main.f95 almagest.o

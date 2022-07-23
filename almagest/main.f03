@@ -7,27 +7,27 @@ program main
   real(8) :: alt, amz, RA, Decl
   real*8, dimension(7, 2) :: radecls
 
-  !print *, "Enter lat/lon: "
-  !read  *, lat, lon
+  print *, "Enter lat/lon: "
+  read  *, lat, lon
 
-  !print *, "Enter Month/Day/Year: "
-  !read  *, M, d, Y
+  print *, "Enter Month/Day/Year: "
+  read  *, M, d, Y
 
-  !print *, "Enter hour/minute/second: " read  *, hh, mm, ssd
+  print *, "Enter hour/minute/second: " read  *, hh, mm, ssd
 
-  !print *, "Enter UTC offset: "
-  !read  *, utc_offset
+  print *, "Enter UTC offset: "
+  read  *, utc_offset
 
   ! Test Values
-  lat = 60
-  lon = 15
-  M = 4
-  d = 19
-  Y = 1990
-  hh = 0
-  mm = 0
-  ss = 00
-  utc_offset = 2
+  ! lat = 60
+  ! lon = 15
+  ! M = 4
+  ! d = 19
+  ! Y = 1990
+  ! hh = 0
+  ! mm = 0
+  ! ss = 00
+  ! utc_offset = 2
 
   call computeSolarTimeValues(lat, lon, M, d, Y, hh, mm, ss, utc_offset)
   call computeSolarPosition(alt, amz)

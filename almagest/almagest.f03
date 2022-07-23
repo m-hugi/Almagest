@@ -2,7 +2,6 @@
 ! Might need to normalize all angles
 ! Use computeHeliocentricCoords everywhere
 ! Sufficiently test for accuracy
-! Convert planetary geoc to topo
 
 module almagest
   implicit none

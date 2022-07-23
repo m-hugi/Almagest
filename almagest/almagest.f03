@@ -228,8 +228,8 @@ contains
 
     integer :: i
 
-    real*8 :: plat, plon, pr
-    real*8 :: x, y, z, xeq, yeq, zeq, RA, Decl
+    real*8 :: plat, plon, pr, HA, glat, g, rho, pp
+    real*8 :: x, y, z, xeq, yeq, zeq, RA, Decl, r
 
     real*8, dimension(7,2), INTENT(OUT) :: radecls
 
@@ -339,6 +339,20 @@ contains
       !Compute geocentric Right Acension and Declination
       RA = normAng(atan2d(yeq, xeq))
       Decl = atan2d(zeq, sqrt(xeq**2 + yeq**2))
+      r = sqrt(xeq**2 + yeq**2 + zeq**2)
+
+      glat = lat - 0.1924d0 * sind(2*lat)        !Geocentric latitude
+      rho  = 0.99833d0 + 0.00167d0 * cosd(2*lat) !Distance from the center of the Earth
+
+      HA = normAng((LST * 15) - RA) !Hour Angle (LST * 15 converts to degrees)
+      g  = atand(tand(glat) / cosd(HA)) ! Auxillary angle
+
+      ! Calculate parllax angle
+      pp = (8.794d0/3600) / r
+
+      !Convert geocentric RA,Decl to topocentric RA,Decl
+      RA   = RA   - pp * rho * cosd(glat) * sind(HA) / cosd(Decl)
+      Decl = Decl - pp * rho * sind(glat) * sind(g - Decl) / sind(g)
 
       radecls(i, 1) = RA
       radecls(i, 2) = Decl

@@ -131,9 +131,9 @@ contains
 
     real*8, intent(out) :: RA, Decl
 
-    real*8 :: n, i, w, a, e, m, d, l, f, ea
+    real*8 :: n, i, w, a, e, m, d, l, f
     real*8 :: mlat, mlon, glat, HA, rho, g, lp
-    real*8 :: x, xe, xeq, y, ye, yeq, ze, zeq, r, v
+    real*8 :: xe, xeq, ye, yeq, ze, zeq, r
 
 
     !Calculate lunar orbital elements
@@ -149,26 +149,7 @@ contains
     d = l - sml   !Mean elongation
     f = l - n     !Argument of Latitude
 
-    !Compute eccentric anomaly
-    ea = calculateEA(e, m, 0.005d0)
-
-    !Compute rectanglar coordinates
-    x = a * (cosd(ea) - e)
-    y = a * sqrt(1 - e**2) * sind(ea)
-
-    !Convert to polar coordinatesx
-    r = sqrt(x**2 + y**2)  !Distance
-    v = atan2d(y, x)       !True anomaly
-
-    !Compute ecliptic coordinates
-    xe = r * (cosd(n)   * cosd(v+w) - sind(n) * sind(v+w) * cosd(i))
-    ye = r * (sind(n)   * cosd(v+w) + cosd(n) * sind(v+w) * cosd(i))
-    ze = r * sind(v+w) * sind(i)
-
-    !Convert to lat, lon, dist
-    mlon = normAng(atan2d(ye, xe))
-    mlat = atan2d(ze, sqrt(xe**2 + ye**2))
-    r   = sqrt(xe**2 + ye**2 + ze**2)
+    call computeHeliocentricCoords(n, i, w, a, e, M, mlat, mlon, r)
 
     !Account for lunar perturbations (Might need to be sind)
     mlon = mlon -1.274d0 * sind(m - 2*d)       & !(Evection)
@@ -191,7 +172,7 @@ contains
                 +0.017d0 * sind(2*m + f)       
 
     r    =  r -0.58d0 * cosd(m - 2*d)        &
-              -0.46d0 * cosd(2*d)            
+              -0.46d0 * cosd(2*d)           
 
     !Compute rectangular ecliptic coordinates
     xe = r * cosd(mlon) * cosd(mlat)
@@ -320,7 +301,6 @@ contains
       ! Precess to epoch 2000
       plon = plon + 3.82394E-5 * (0-JDN)
 
-      ! Conversion to ecliptic system
       x = pr * cosd(plon) * cosd(plat)
       y = pr * sind(plon) * cosd(plat)
       z = pr * sind(plat)
@@ -416,6 +396,26 @@ contains
   !end function fromHours
 
   !General math functions
+  function toHours(deg)
+    character(len=12) :: toHours
+    real*8 :: deg, h, m, s
+    character(len=2) :: sh, sm, ss
+
+    h = FLOOR(deg)
+    m = (h - deg) * 60
+    s = (m - FLOOR(m)) * 60
+
+    h = h - FLOOR(h/60)*60
+    m = m - FLOOR(m/60)*60
+    s = s - FLOOR(s/60)*60
+
+    write(sh, '(I2)') int(h)
+    write(sm, '(I2)') int(m)
+    write(ss, '(I2)') int(s)
+
+    toHours = sh//'h '//sm//'m '//ss//'s '
+  end function toHours
+
   function normAng(x) !Keeps degree value within proper range
     real*8 :: x, normAng
     

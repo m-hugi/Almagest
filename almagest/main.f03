@@ -13,7 +13,8 @@ program main
   print *, "Enter Month/Day/Year: "
   read  *, M, d, Y
 
-  print *, "Enter hour/minute/second: " read  *, hh, mm, ssd
+  print *, "Enter hour/minute/second: "
+  read  *, hh, mm, ssd
 
   print *, "Enter UTC offset: "
   read  *, utc_offset

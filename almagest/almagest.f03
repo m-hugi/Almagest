@@ -1,18 +1,20 @@
 !TODO:
 ! Might need to normalize all angles
-! Use computeHeliocentricCoords everywhere
 ! Sufficiently test for accuracy
+! UTC Offset might not be implemented correctly
 
 module almagest
   implicit none
 
   real*8, parameter :: PI  = ATAN(1.d0) * 4.d0
   real*8, parameter :: RAD = (180.d0/PI)
+  real*8, parameter :: EA_ACCU = 0.005d0
 
   real*8 :: lat, lon
   real*8 :: LST, JDN
   real*8 :: olat, sma, sml, ooe 
   real*8 :: sol_x, sol_y, sol_z
+  real*8 :: glat, rho 
 
   private planet
   type planet
@@ -38,6 +40,9 @@ contains
     lat = latitiude
     lon = longitude
 
+    glat = lat - 0.1924d0 * sind(2*lat)        !Geocentric latitude
+    rho  = 0.99833d0 + 0.00167d0 * cosd(2*lat) !Distance from the center of the Earth
+
     !Initial time values
     UT = (hh-utc_offset) + (mm/60) + (ss/3600)
     JDN = real((367*Y - 7*(Y+(M+9)/12)/4 - 3*((Y+(M-9)/7)/100 + 1)/4 + 275*M/9 + D-730515) + UT/24)
@@ -61,19 +66,19 @@ contains
     end if
   end subroutine computeSolarTimeValues
 
-  subroutine computeSolarPosition(azm, alt)
+  function computeSolarPosition()
     implicit none
 
-    real*8, intent(out) :: alt, azm
+    real*8, dimension(2) :: computeSolarPosition
 
     real*8 :: w, e, ea, L
     real*8 :: x, xe, y, ye, z, ze, r, v
-    real*8 :: HA, RA, Decl
+    real*8 :: HA, RA, Decl, alt, azm
 
     w = 282.9404d0 + 4.70935E-5     * JDN !Longitude of perihelion)
     e = 0.016709d0 - 1.151E-9       * JDN !Eccentricity)
 
-    ea = calculateEA0(e, sma)   !Calculate eccentric anomaly
+    ea = calculateEA(e, sma, EA_ACCU)   !Calculate eccentric anomaly
 
     !Sun's coordinates in ecliptic plane
     x = cosd(ea) - e
@@ -98,7 +103,7 @@ contains
     !Convert to Geocentric RA/Decl/Dist
     RA   = atan2d(ye, xe)
     Decl = atan2d(ze, sqrt(xe**2 + ye**2))
-    r    = sqrt(xe**2 + ye**2 + ze**2)
+    r = sqrt(xe**2 + ye**2 + ze**2)
 
     HA = (LST - (RA/15.d0)) * 15    !Hour angle
 
@@ -124,16 +129,19 @@ contains
     else if (alt .lt. -0.575d0) then
        alt = alt + 1.d0/3600.d0 * (-20.774d0/tand(alt))
     end if
-  end subroutine computeSolarPosition
 
-  subroutine computeLunarPosition(RA, Decl)
+    computeSolarPosition = [alt, azm]
+  end function computeSolarPosition
+
+  function computeLunarPosition()
     implicit none
 
-    real*8, intent(out) :: RA, Decl
+    real*8, dimension(2) :: computeLunarPosition
 
     real*8 :: n, i, w, a, e, m, d, l, f
-    real*8 :: mlat, mlon, glat, HA, rho, g, lp
+    real*8 :: mlat, mlon, lp
     real*8 :: xe, xeq, ye, yeq, ze, zeq, r
+    real*8 :: RA, Decl
 
 
     !Calculate lunar orbital elements
@@ -190,81 +198,70 @@ contains
 
     !Transalte RA, Decl into topocentic values
     lp = Asind(1.d0/r) !Lunar parallax
+    computeLunarPosition = geocToTopo(RA, Decl, lp)
+  end function computeLunarPosition
 
-    !Account for flattening of the Earth
-    glat = lat - 0.1924d0 * sind(2*lat)        !Geocentric latitude
-    rho  = 0.99833d0 + 0.00167d0 * cosd(2*lat) !Distance from the center of the Earth
-
-    HA = normAng((LST * 15) - RA) !Hour Angle (LST * 15 converts to degrees)
-    g  = atand(tand(glat) / cosd(HA)) ! Auxillary angle
-
-    !Convert geocentric RA,Decl to topocentric RA,Decl
-    RA   = RA   - lp * rho * cosd(glat) * sind(HA) / cosd(Decl)
-    Decl = Decl - lp * rho * sind(glat) * sind(g - Decl) / sind(g)
-  end subroutine computeLunarPosition
-
-  subroutine computePlanetaryPositions(radecls)
+  function computePlanetaryPositions() RESULT(radecls)
     implicit none
 
+    real*8, dimension(7, 2) :: radecls
+
     integer :: i
-
-    real*8 :: plat, plon, pr, HA, glat, g, rho, pp
+    real*8 :: plat, plon, pr, pp
     real*8 :: x, y, z, xeq, yeq, zeq, RA, Decl, r
-
-    real*8, dimension(7,2), INTENT(OUT) :: radecls
 
     type(planet) :: p
     type(planet) :: Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune
     type(planet), dimension(7) :: planets
 
-    Mercury%N =  48.3313d0 + 3.24587E-5   * JDN 
-    Mercury%i =   7.0047d0 + 5.00E-8      * JDN 
-    Mercury%w =  29.1241d0 + 1.01444E-5   * JDN 
+    Mercury%N =  48.3313d0 + 3.24587E-5     * JDN 
+    Mercury%i =   7.0047d0 + 5.00E-8        * JDN 
+    Mercury%w =  29.1241d0 + 1.01444E-5     * JDN 
     Mercury%a = 0.387098d0                            
-    Mercury%e = 0.205635d0     + 5.59E-10         * JDN 
+    Mercury%e = 0.205635d0     + 5.59E-10   * JDN 
     Mercury%M = 168.6562d0 + 4.0923344368d0 * JDN
 
-    Venus%N =  76.6799d0 + 2.46590E-5   * JDN
-    Venus%i =   3.3946d0 + 2.75E-8      * JDN
-    Venus%w =  54.8910d0 + 1.38374E-5   * JDN
+    Venus%N =  76.6799d0 + 2.46590E-5     * JDN
+    Venus%i =   3.3946d0 + 2.75E-8        * JDN
+    Venus%w =  54.8910d0 + 1.38374E-5     * JDN
     Venus%a = 0.723330d0
-    Venus%e = 0.006773d0     - 1.302E-9         * JDN
+    Venus%e = 0.006773d0     - 1.302E-9   * JDN
     Venus%M =  48.0052d0 + 1.6021302244d0 * JDN
 
-    Mars%N =  49.5574d0 + 2.11081E-5   * JDN
-    Mars%i =   1.8497d0 - 1.78E-8      * JDN
-    Mars%w = 286.5016d0 + 2.92961E-5   * JDN
+    Mars%N =  49.5574d0 + 2.11081E-5     * JDN
+    Mars%i =   1.8497d0 - 1.78E-8        * JDN
+    Mars%w = 286.5016d0 + 2.92961E-5     * JDN
     Mars%a = 1.523688d0
-    Mars%e = 0.093405d0     + 2.516E-9         * JDN
+    Mars%e = 0.093405d0     + 2.516E-9   * JDN
     Mars%M =  18.6021d0 + 0.5240207766d0 * JDN
 
-    Jupiter%N = 100.4542d0 + 2.76854E-5   * JDN
-    Jupiter%i =   1.3030d0 - 1.557E-7     * JDN
-    Jupiter%w = 273.8777d0 + 1.64505E-5   * JDN
+    Jupiter%N = 100.4542d0 + 2.76854E-5    * JDN
+    Jupiter%i =   1.3030d0 - 1.557E-7      * JDN
+    Jupiter%w = 273.8777d0 + 1.64505E-5    * JDN
     Jupiter%a = 5.20256d0
     Jupiter%e = 0.048498d0     + 4.469E-9  * JDN
     Jupiter%M = 19.8950d0 + 0.0830853001d0 * JDN
 
-    Saturn%N = 113.6634d0 + 2.38980E-5   * JDN
-    Saturn%i =   2.4886d0 - 1.081E-7     * JDN
-    Saturn%w = 339.3939d0 + 2.97661E-5   * JDN
+    Saturn%N = 113.6634d0 + 2.38980E-5     * JDN
+    Saturn%i =   2.4886d0 - 1.081E-7       * JDN
+    Saturn%w = 339.3939d0 + 2.97661E-5     * JDN
     Saturn%a = 9.55475d0
-    Saturn%e = 0.055546d0     - 9.499E-9         * JDN
+    Saturn%e = 0.055546d0     - 9.499E-9   * JDN
     Saturn%M = 316.9670d0 + 0.0334442282d0 * JDN
 
-    Uranus%N =  74.0005d0 + 1.3978E-5    * JDN
-    Uranus%i =   0.7733d0 + 1.9E-8       * JDN
-    Uranus%w =  96.6612d0 + 3.0565E-5    * JDN
-    Uranus%a = 19.18171d0 - 1.55E-8        * JDN
-    Uranus%e = 0.047318d0 + 7.45E-9        * JDN
-    Uranus%M = 142.5905d0 + 0.011725806d0  * JDN
+    Uranus%N =  74.0005d0 + 1.3978E-5     * JDN
+    Uranus%i =   0.7733d0 + 1.9E-8        * JDN
+    Uranus%w =  96.6612d0 + 3.0565E-5     * JDN
+    Uranus%a = 19.18171d0 - 1.55E-8       * JDN
+    Uranus%e = 0.047318d0 + 7.45E-9       * JDN
+    Uranus%M = 142.5905d0 + 0.011725806d0 * JDN
 
-    Neptune%N = 131.7806d0 + 3.0173E-5    * JDN
-    Neptune%i =   1.7700d0 - 2.55E-7      * JDN
-    Neptune%w = 272.8461d0 - 6.027E-6     * JDN
-    Neptune%a = 30.05826d0 + 3.313E-8     * JDN
-    Neptune%e = 0.008606d0 + 2.15E-9      * JDN
-    Neptune%M = 260.2471d0 + 0.005995147d0  * JDN
+    Neptune%N = 131.7806d0 + 3.0173E-5     * JDN
+    Neptune%i =   1.7700d0 - 2.55E-7       * JDN
+    Neptune%w = 272.8461d0 - 6.027E-6      * JDN
+    Neptune%a = 30.05826d0 + 3.313E-8      * JDN
+    Neptune%e = 0.008606d0 + 2.15E-9       * JDN
+    Neptune%M = 260.2471d0 + 0.005995147d0 * JDN
 
     ! Calculate perturbations
     Jupiter%lon_adj = -0.332d0 * sind(2*Jupiter%M - 5*Saturn%M - 67.6d0) &
@@ -305,7 +302,7 @@ contains
       y = pr * sind(plon) * cosd(plat)
       z = pr * sind(plat)
 
-      ! Add solar rectangular coordinates to convert to geocentric
+      ! Add solar rectangular coordinates
       x = x + sol_x
       y = y + sol_y
       z = z + sol_z
@@ -320,31 +317,20 @@ contains
       Decl = atan2d(zeq, sqrt(xeq**2 + yeq**2))
       r = sqrt(xeq**2 + yeq**2 + zeq**2)
 
-      glat = lat - 0.1924d0 * sind(2*lat)        !Geocentric latitude
-      rho  = 0.99833d0 + 0.00167d0 * cosd(2*lat) !Distance from the center of the Earth
-
-      HA = normAng((LST * 15) - RA) !Hour Angle (LST * 15 converts to degrees)
-      g  = atand(tand(glat) / cosd(HA)) ! Auxillary angle
-
       ! Calculate parllax angle
       pp = (8.794d0/3600) / r
 
-      !Convert geocentric RA,Decl to topocentric RA,Decl
-      RA   = RA   - pp * rho * cosd(glat) * sind(HA) / cosd(Decl)
-      Decl = Decl - pp * rho * sind(glat) * sind(g - Decl) / sind(g)
-
-      radecls(i, 1) = RA
-      radecls(i, 2) = Decl
+      radecls(i, :) = geocToTopo(RA, Decl, pp)
     end do
-  end subroutine computePlanetaryPositions
+  end function computePlanetaryPositions
 
-  subroutine computeHeliocentricCoords(n, i, w, a, e, m, o_lat, o_lon, o_r)
+  subroutine computeHeliocentricCoords(n, i, w, a, e, m,  hlat, hlon, hr)
     real*8, intent(in) :: n, i, w, a, e, m
-    real*8, intent(out) :: o_lat, o_lon, o_r
+    real*8, intent(out) :: hlat, hlon, hr
 
     real*8 :: ea, x, y, xe, ye, ze, r, v
 
-    ea = calculateEA(e, m, 0.005d0)
+    ea = calculateEA(e, m, EA_ACCU)
 
     !Compute rectanglar coordinates
     x = a * (cosd(ea) - e)
@@ -360,21 +346,32 @@ contains
     ze = r * sind(v+w) * sind(i)
 
     !Convert to lat, lon, dist
-    o_lon = normAng(atan2d(ye, xe))
-    o_lat = atan2d(ze, sqrt(xe**2 + ye**2))
-    o_r   = sqrt(xe**2 + ye**2 + ze**2)
+    hlon = normAng(atan2d(ye, xe))
+    hlat = atan2d(ze, sqrt(xe**2 + ye**2))
+    hr   = sqrt(xe**2 + ye**2 + ze**2)
   end subroutine computeHeliocentricCoords
 
-  function calculateEA0(e, M) !Calculate inital eccentric anomaly
-    real*8 :: e, M, calculateEA0
+  !Convert geocentric coordinates to topocentric
+  function geocToTopo(RA, Decl, pa) !pa is parallax angle; returns [RA, Decl]
+    real*8 :: RA, Decl, pa
+    real*8, dimension(2) :: geocToTopo
 
-    calculateEA0 = M + to_rad(e) * sind(M) * (1.0 + e * cosd(M))
-  end function calculateEA0
+    real*8 :: HA, g
+
+    HA = normAng((LST * 15) - RA) !Hour Angle (LST * 15 converts to degrees)
+    g  = atand(tand(glat) / cosd(HA)) ! Auxillary angle
+
+    !Convert geocentric RA,Decl to topocentric RA,Decl
+    RA   = RA   - pa * rho * cosd(glat) * sind(HA) / cosd(Decl)
+    Decl = Decl - pa * rho * sind(glat) * sind(g - Decl) / sind(g)
+
+    geocToTopo = [RA, Decl]
+  end function geocToTopo
 
   function calculateEA(e, M, accu) !Iteratively calculate a more accurate EA
     real*8  :: e, M, EA0, EA1, accu, calculateEA
 
-    EA0 = calculateEA0(e, M)
+    EA0 = M + to_rad(e) * sind(M) * (1.0 + e * cosd(M))
     DO WHILE (.TRUE.)
       EA1 = EA0 - (EA0 - to_rad(e) * sind(EA0) - M) / (1 - e * cosd(EA0))
       if (abs(EA1 - EA0) .le. accu) then
@@ -387,34 +384,47 @@ contains
     calculateEA = EA0
   end function calculateEA
 
-  ! Currently unused
-  !function fromHours(h, m, s)
-  !  integer :: fromHours
-  !  integer  :: h, m, s
-  !
-  !  fromHours = h + (m/60) + (s/3600)
-  !end function fromHours
-
   !General math functions
-  function toHours(deg)
-    character(len=12) :: toHours
+  function toRAHours(deg) !Converts degrees to Right Acension
+    character(len=15) :: toRAHours
     real*8 :: deg, h, m, s
-    character(len=2) :: sh, sm, ss
+    character(len=3) :: sh, sm, ss
+
+    deg = deg / 15
 
     h = FLOOR(deg)
-    m = (h - deg) * 60
+    m = (deg - h) * 60
     s = (m - FLOOR(m)) * 60
 
-    h = h - FLOOR(h/60)*60
-    m = m - FLOOR(m/60)*60
-    s = s - FLOOR(s/60)*60
+    !Conver values to strings
+    write(sh, '(I3)') int(h)
+    write(sm, '(I3)') int(m)
+    write(ss, '(I3)') int(s)
 
-    write(sh, '(I2)') int(h)
-    write(sm, '(I2)') int(m)
-    write(ss, '(I2)') int(s)
+    toRAHours = sh//'h '//sm//'m '//ss//'s '
+  end function toRAHours
 
-    toHours = sh//'h '//sm//'m '//ss//'s '
-  end function toHours
+  function toArcTime(deg) !Degrees to Arcmin/Arcsec
+    character(len=15) :: toArcTime
+    character(2), parameter :: utf_degree = char(int(Z'C2'))//char(int(Z'B0')) !Somehow makes a degree symbol
+
+    real*8 :: deg, am, as
+    character(len=3) :: sd
+    character(len=2) :: sm, ss
+
+    !Normalize angle to remove negative sign
+    deg = normAng(deg)
+
+    am = (deg - FLOOR(deg)) * 60
+    as = (am - FLOOR(am)) * 60
+
+    !Conver values to string
+    write(sd, '(I3)') int(deg)
+    write(sm, '(I2)') int(am)
+    write(ss, '(I2)') int(as)
+
+    toArcTime = sd//utf_degree//' '//sm//"' "//ss//'" '
+  end function toArcTime
 
   function normAng(x) !Keeps degree value within proper range
     real*8 :: x, normAng
@@ -427,11 +437,4 @@ contains
 
     to_rad = x * RAD
   end function to_rad
-
-  ! Currently unused
-  !function to_deg(x) !Convert to degrees
-  !  real*8 :: x, to_deg
-  !
-  !  to_deg = x * (PI/180.d0)
-  !end function to_deg
 end MODULE almagest

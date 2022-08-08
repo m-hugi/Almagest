@@ -19,8 +19,13 @@ program main
   !print *, "Enter Month/Day/Year: "
   !read  *, M, d, Y
 
+<<<<<<< HEAD
   !print *, "Enter hour/minute/second: "
   !read  *, hh, mm, ss
+=======
+  print *, "Enter hour/minute/second: "
+  read  *, hh, mm, ssd
+>>>>>>> origin/main
 
   !print *, "Enter UTC offset: "
   !read  *, utc_offset
@@ -103,5 +108,9 @@ program main
   print "(A)"
   print *, "Neptune Topo RA: ", toHours(radecls(6, 1))
   print *, "Neptune Topo Decl: ", radecls(6, 2)
+<<<<<<< HEAD
 >>>>>>> main
 end program main
+=======
+end program main
+>>>>>>> origin/main

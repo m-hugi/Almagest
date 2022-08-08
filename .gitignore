@@ -30,4 +30,9 @@
 *.exe
 *.out
 *.app
+<<<<<<< HEAD
+=======
+
+# Ignore xompiled executable
+>>>>>>> main
 almagest
